@@ -80,11 +80,23 @@ export function LinkAnalyzer({ username, onLogout }: LinkAnalyzerProps) {
     const base = saved || defaultApi;
     const endpoint = base.includes('/predict') ? base : base.replace(/\/+$/,'') + '/predict';
 
+    // Normalize URL to send to API: prefer exact scheme if provided, else try http, then https
+    let sendUrl = url;
+    try {
+      new URL(sendUrl);
+    } catch (_) {
+      try { new URL('http://' + sendUrl); sendUrl = 'http://' + sendUrl; }
+      catch (_) {
+        try { new URL('https://' + sendUrl); sendUrl = 'https://' + sendUrl; }
+        catch (_) { /* keep original, API may reject */ }
+      }
+    }
+
     try {
       const resp = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
+        body: JSON.stringify({ url: sendUrl })
       });
 
       const data = await resp.json();
@@ -100,6 +112,48 @@ export function LinkAnalyzer({ username, onLogout }: LinkAnalyzerProps) {
         threats: [],
         details: ''
       };
+
+      // Handle the specific API structure you provided:
+      // {
+      //  combined: { final_label, final_score },
+      //  local_model: { confidence, maliciousness, pred_class },
+      //  url: ..., whitelist: false
+      // }
+      if (data && data.combined && data.local_model) {
+        const finalLabel = (data.combined.final_label || '').toString();
+        const finalScore = Number(data.combined.final_score ?? data.combined.score ?? 0);
+        const lm = data.local_model || {};
+
+        // Decide maliciousness using both combined and local_model. If local_model predicts
+        // a known malicious label (e.g. defacement, phishing) or has high confidence,
+        // prefer that over the combined.final_label which may be more conservative.
+        const maliciousLabels = /malicious|scam|phish|phishing|bad|deface|defacement|malware|attack|ransomware|suspicious|trojan|exploit|spyware/;
+        let isMal = finalLabel.toLowerCase() !== 'benign';
+        if (lm.pred_class && maliciousLabels.test(String(lm.pred_class).toLowerCase())) isMal = true;
+        // If local model confidence is high (e.g. >50%), trust it
+        const lmConfNum = Number(lm.confidence ?? NaN);
+        if (!isNaN(lmConfNum) && lmConfNum > 50) isMal = true;
+        mapped.isMalicious = isMal;
+
+        // Prefer local_model.confidence when present (assumed 0-100), fall back to combined score
+        let conf = Number(lm.confidence ?? data.confidence ?? finalScore ?? 0);
+        if (!isNaN(conf)) {
+          if (conf <= 1) conf = conf * 100;
+          mapped.confidence = Math.round(conf);
+        }
+
+        // Build threats list from model label and combined label
+        const threats: string[] = [];
+        if (lm.pred_class) threats.push(String(lm.pred_class));
+        if (finalLabel) threats.push(String(finalLabel));
+        mapped.threats = Array.from(new Set(threats));
+
+        mapped.details = `Combined: ${finalLabel} (${finalScore}); Local: ${lm.pred_class || 'n/a'} (maliciousness: ${lm.maliciousness ?? 'n/a'}, confidence: ${lm.confidence ?? 'n/a'}). Whitelist: ${data.whitelist ?? false}`;
+
+        setResult(mapped);
+        setIsAnalyzing(false);
+        return;
+      }
 
       if (typeof data.isMalicious === 'boolean') {
         mapped.isMalicious = data.isMalicious;
