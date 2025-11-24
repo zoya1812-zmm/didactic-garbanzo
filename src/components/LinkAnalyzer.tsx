@@ -395,11 +395,13 @@ export function LinkAnalyzer({ username, onLogout }: LinkAnalyzerProps) {
                 </div>
               )}
 
-              <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                <p className="text-sm text-blue-800">
-                  <strong>Safety Tip:</strong> Be extremely cautious with money-making opportunities online. Legitimate investments never guarantee returns or pressure you to act immediately. Always research thoroughly before sharing personal information or making payments.
-                </p>
-              </div>
+              {result.isMalicious && (
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    <strong>Safety Tip:</strong> Be extremely cautious with money-making opportunities online. Legitimate investments never guarantee returns or pressure you to act immediately. Always research thoroughly before sharing personal information or making payments.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
