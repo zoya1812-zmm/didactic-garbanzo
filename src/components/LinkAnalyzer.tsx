@@ -332,7 +332,7 @@ export function LinkAnalyzer({ username, onLogout }: LinkAnalyzerProps) {
                 <Shield className="w-5 h-5 text-indigo-600" />
               </div>
               <div>
-                <h1 className="text-xl">Scam Money Making App Detection</h1>
+                <h1 className="text-xl">Malicious Link Detection</h1>
                 <p className="text-sm text-gray-600">Welcome back, {username}</p>
               </div>
             </div>

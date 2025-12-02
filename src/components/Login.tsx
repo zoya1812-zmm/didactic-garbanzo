@@ -54,7 +54,7 @@ export function Login({ onLogin }: LoginProps) {
             <Shield className="w-8 h-8 text-indigo-600" />
           </div>
           <div>
-            <CardTitle className="text-2xl">Scam Money Making App Detection</CardTitle>
+            <CardTitle className="text-2xl">Malicious Link Detection</CardTitle>
             <CardDescription>
               Sign in to detect and analyze suspicious money-making schemes
             </CardDescription>
