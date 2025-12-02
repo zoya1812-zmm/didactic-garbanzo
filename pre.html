@@ -96,9 +96,16 @@
         const data = await response.json();
 
         if (response.ok) {
+          // Support multiple API response shapes: `predicted_class` + `confidence`,
+          // or `{ local_model: { pred_class, confidence } }`.
+          const pred = data.predicted_class || (data.local_model && data.local_model.pred_class) || (data.local_model && data.local_model.pred_class) || 'unknown';
+          let conf = data.confidence ?? (data.local_model && data.local_model.confidence) ?? (data.local_model && data.local_model.conf) ?? null;
+          if (conf !== null && conf <= 1) conf = conf * 100;
+          const confStr = conf === null || conf === undefined ? 'n/a' : `${Math.round(conf)}%`;
+
           resultDiv.innerHTML = `
-            ✅ <b>Prediction:</b> ${data.predicted_class}<br/>
-            🎯 <b>Confidence:</b> ${data.confidence}%
+            ✅ <b>Prediction:</b> ${pred}<br/>
+            🎯 <b>Confidence:</b> ${confStr}
           `;
         } else {
           resultDiv.innerHTML = `<span class='error'>❌ Error: ${data.error || 'Something went wrong'}</span>`;

@@ -85,14 +85,23 @@ export function LinkAnalyzer({ username, onLogout }: LinkAnalyzerProps) {
     try {
       new URL(sendUrl);
     } catch (_) {
-      try { new URL('http://' + sendUrl); sendUrl = 'http://' + sendUrl; }
+      // Prefer HTTPS when normalizing (matches backend normalization behavior)
+      try { new URL('https://' + sendUrl); sendUrl = 'https://' + sendUrl; }
       catch (_) {
-        try { new URL('https://' + sendUrl); sendUrl = 'https://' + sendUrl; }
+        try { new URL('http://' + sendUrl); sendUrl = 'http://' + sendUrl; }
         catch (_) { /* keep original, API may reject */ }
       }
     }
 
     try {
+      // Debug: show where we're sending the request and what payload
+      try {
+        // eslint-disable-next-line no-console
+        console.log('[LinkAnalyzer] savedApiUrl:', saved, 'defaultApi:', defaultApi);
+        // eslint-disable-next-line no-console
+        console.log('[LinkAnalyzer] endpoint:', endpoint, 'sendUrl:', sendUrl);
+      } catch (e) { /* ignore */ }
+
       const resp = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -100,6 +109,13 @@ export function LinkAnalyzer({ username, onLogout }: LinkAnalyzerProps) {
       });
 
       const data = await resp.json();
+      // Debug: log endpoint and raw API response to help diagnose mismatches
+      try {
+        // eslint-disable-next-line no-console
+        console.log('[LinkAnalyzer] api response status:', resp.status, 'ok:', resp.ok);
+        // eslint-disable-next-line no-console
+        console.log('[LinkAnalyzer] api response body:', data);
+      } catch (e) { /* ignore */ }
 
       if (!resp.ok) {
         throw new Error(data?.error || `API returned ${resp.status}`);
@@ -150,10 +166,43 @@ export function LinkAnalyzer({ username, onLogout }: LinkAnalyzerProps) {
 
         mapped.details = `Combined: ${finalLabel} (${finalScore}); Local: ${lm.pred_class || 'n/a'} (maliciousness: ${lm.maliciousness ?? 'n/a'}, confidence: ${lm.confidence ?? 'n/a'}). Whitelist: ${data.whitelist ?? false}`;
 
+        try {
+          // eslint-disable-next-line no-console
+          console.log('[LinkAnalyzer] combined branch values', { finalLabel, finalScore, lm, lmConfNum, isMal, conf, threats });
+        } catch (e) { /* ignore */ }
+
         setResult(mapped);
         setIsAnalyzing(false);
         return;
       }
+
+        // If the API only returned a `local_model` (no combined), map that shape too
+        if (data && data.local_model && !data.combined) {
+          const lm = data.local_model || {};
+          const pred = (lm.pred_class || '').toString();
+          const maliciousLabels = /malicious|scam|phish|phishing|bad|deface|defacement|malware|attack|ransomware|suspicious|trojan|exploit|spyware/;
+
+          mapped.isMalicious = maliciousLabels.test(pred.toLowerCase());
+
+          // Confidence might be 0-100 or 0-1 depending on API; normalize to percentage
+          let conf = Number(lm.confidence ?? lm.conf ?? data.confidence ?? NaN);
+          if (!isNaN(conf)) {
+            if (conf <= 1) conf = conf * 100;
+            mapped.confidence = Math.round(conf);
+          }
+
+          mapped.threats = pred ? [pred] : [];
+          mapped.details = `Local model predicted: ${pred || 'n/a'} (maliciousness: ${lm.maliciousness ?? 'n/a'}, confidence: ${lm.confidence ?? lm.conf ?? 'n/a'}). Whitelist: ${data.whitelist ?? false}`;
+
+          try {
+            // eslint-disable-next-line no-console
+            console.log('[LinkAnalyzer] local_model-only branch', { pred, lm, mapped });
+          } catch (e) { /* ignore */ }
+
+          setResult(mapped);
+          setIsAnalyzing(false);
+          return;
+        }
 
       if (typeof data.isMalicious === 'boolean') {
         mapped.isMalicious = data.isMalicious;
